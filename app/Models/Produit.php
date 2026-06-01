@@ -41,6 +41,16 @@ class Produit extends Model
         return $this->hasMany(LigneCommande::class);
     }
 
+    public function favoris(): HasMany
+    {
+        return $this->hasMany(ProduitFavori::class);
+    }
+
+    public function avis(): HasMany
+    {
+        return $this->hasMany(ProduitAvis::class);
+    }
+
     // ===== Scopes =====
     public function scopeActif($query)
     {

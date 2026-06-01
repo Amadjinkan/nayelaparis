@@ -1,9 +1,12 @@
 <?php
 
 use App\Http\Controllers\AdminCommandeController;
+use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommandeController;
 use App\Http\Controllers\ConfigController;
+use App\Http\Controllers\ContactController;
+use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\MenuItemController;
 use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\ProduitController;
@@ -23,6 +26,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+    Route::post('password/forgot', [AuthController::class, 'requestPasswordReset']);
 });
 
 // Catalogue produits — accessible à tous
@@ -34,6 +38,17 @@ Route::get('config', [ConfigController::class, 'index']);
 
 // Menu public administrable
 Route::get('menu', [MenuItemController::class, 'index']);
+
+// Contact public
+Route::post('contact', [ContactController::class, 'store']);
+
+// Marketing public
+Route::get('marketing/recommandes', [MarketingController::class, 'recommended']);
+Route::get('marketing/recemment-vus', [MarketingController::class, 'recent']);
+Route::post('marketing/coupons/verifier', [MarketingController::class, 'validateCoupon']);
+Route::post('produits/{id}/vue', [MarketingController::class, 'recordView']);
+Route::get('produits/{id}/similaires', [MarketingController::class, 'similar']);
+Route::get('produits/{id}/avis', [MarketingController::class, 'reviews']);
 
 // Contenu public administrable
 Route::get('site/content', [SiteContentController::class, 'publicContent']);
@@ -61,8 +76,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Commandes
     Route::get('commandes', [CommandeController::class, 'mesCommandes']);
+    Route::get('commandes/{id}/facture', [CommandeController::class, 'facture']);
     Route::get('commandes/{id}', [CommandeController::class, 'show']);
     Route::post('commandes', [CommandeController::class, 'store']);
+
+    // Marketing client
+    Route::get('marketing/favoris', [MarketingController::class, 'favorites']);
+    Route::post('marketing/favoris/{id}', [MarketingController::class, 'addFavorite']);
+    Route::delete('marketing/favoris/{id}', [MarketingController::class, 'removeFavorite']);
+    Route::post('produits/{id}/avis', [MarketingController::class, 'addReview']);
+    Route::get('marketing/fidelite', [MarketingController::class, 'loyalty']);
 
     // Paiement
     Route::post('paiements/intent', [PaiementController::class, 'creerIntent']);
@@ -78,6 +101,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->prefix('admin')->group(function () {
         // Stats
         Route::get('statistiques', [AdminCommandeController::class, 'stats']);
+        Route::get('dashboard', [AdminDashboardController::class, 'index']);
+        Route::get('dashboard/export', [AdminDashboardController::class, 'export']);
 
         // Produits
         Route::get('produits', [ProduitController::class, 'adminIndex']);
@@ -108,6 +133,15 @@ Route::middleware('auth:sanctum')->group(function () {
         // Commandes
         Route::get('commandes', [AdminCommandeController::class, 'index']);
         Route::put('commandes/{id}', [AdminCommandeController::class, 'update']);
+
+        // Marketing
+        Route::get('coupons', [MarketingController::class, 'adminCoupons']);
+        Route::post('coupons', [MarketingController::class, 'storeCoupon']);
+        Route::put('coupons/{id}', [MarketingController::class, 'updateCoupon']);
+        Route::delete('coupons/{id}', [MarketingController::class, 'destroyCoupon']);
+        Route::get('avis', [MarketingController::class, 'adminReviews']);
+        Route::post('avis/{id}/approuver', [MarketingController::class, 'approveReview']);
+        Route::post('avis/{id}/refuser', [MarketingController::class, 'rejectReview']);
 
         // Retours
         Route::get('retours', [RetourController::class, 'adminIndex']);

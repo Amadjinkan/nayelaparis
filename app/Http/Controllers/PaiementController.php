@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Commande;
+use App\Models\Paiement;
 use App\Services\StripeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -106,18 +107,35 @@ class PaiementController extends Controller
 
             case 'payment_intent.payment_failed':
                 $pi = $event->data->object;
-                $paiement = \App\Models\Paiement::where('stripe_payment_intent_id', $pi->id)->first();
+                $paiement = Paiement::where('stripe_payment_intent_id', $pi->id)->first();
                 if ($paiement) {
                     $paiement->update([
                         'statut' => 'failed',
                         'message_erreur' => $pi->last_payment_error->message ?? 'Paiement échoué',
                     ]);
+                    if ($paiement->commande && $paiement->commande->statut === Commande::STATUT_PENDING) {
+                        $paiement->commande->changerStatut(
+                            Commande::STATUT_PENDING,
+                            'Paiement Stripe échoué : ' . ($pi->last_payment_error->message ?? 'Paiement échoué')
+                        );
+                    }
                 }
                 break;
 
             case 'charge.refunded':
-                // Gérer les remboursements (RMA)
-                Log::info('Remboursement Stripe traité', ['charge' => $event->data->object->id]);
+                $charge = $event->data->object;
+                $paiement = Paiement::where('stripe_charge_id', $charge->id)->first();
+                if ($paiement) {
+                    $isFullRefund = (int) ($charge->amount_refunded ?? 0) >= (int) ($charge->amount ?? 0);
+                    $paiement->update(['statut' => $isFullRefund ? 'refunded' : 'partial_refund']);
+                    if ($isFullRefund && $paiement->commande && $paiement->commande->statut !== Commande::STATUT_REFUNDED) {
+                        $paiement->commande?->changerStatut(
+                            Commande::STATUT_REFUNDED,
+                            'Remboursement confirmé automatiquement par Stripe.'
+                        );
+                    }
+                }
+                Log::info('Remboursement Stripe traité', ['charge' => $charge->id]);
                 break;
         }
 

@@ -82,6 +82,49 @@
       return request('/site/categories');
     },
 
+    async getRecommandations(params) {
+      const q = new URLSearchParams(params || {}).toString();
+      return request('/marketing/recommandes' + (q ? '?' + q : ''));
+    },
+
+    async getProduitsSimilaires(id) {
+      return request('/produits/' + id + '/similaires');
+    },
+
+    async enregistrerVueProduit(id, sessionId) {
+      return request('/produits/' + id + '/vue', {
+        method: 'POST',
+        body: { session_id: sessionId || '' },
+      });
+    },
+
+    async getProduitsRecents(sessionId) {
+      const q = sessionId ? '?session_id=' + encodeURIComponent(sessionId) : '';
+      return request('/marketing/recemment-vus' + q);
+    },
+
+    async verifierCoupon(code, subtotal, shipping) {
+      return request('/marketing/coupons/verifier', {
+        method: 'POST',
+        body: { code, subtotal, shipping },
+      });
+    },
+
+    async getAvisProduit(id) {
+      return request('/produits/' + id + '/avis');
+    },
+
+    async envoyerContact(payload) {
+      return request('/contact', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+
+    async sendContact(payload) {
+      return this.envoyerContact(payload);
+    },
+
     // ----- Auth -----
     async register(prenom, nom, email, mot_de_passe, newsletter) {
       const data = await request('/auth/register', {
@@ -113,6 +156,21 @@
       return request('/auth/me');
     },
 
+    async demanderResetMotDePasse(payload) {
+      return request('/auth/password/forgot', {
+        method: 'POST',
+        body: payload,
+      });
+    },
+
+    async requestPasswordReset(payload) {
+      return this.demanderResetMotDePasse(payload);
+    },
+
+    async forgotPassword(payload) {
+      return this.demanderResetMotDePasse(payload);
+    },
+
     // ----- Produits -----
     async getProduits(filtres) {
       const params = new URLSearchParams(filtres || {}).toString();
@@ -135,6 +193,26 @@
 
     async supprimerProduit(id) {
       return request('/admin/produits/' + id, { method: 'DELETE' });
+    },
+
+    async mesFavoris() {
+      return request('/marketing/favoris');
+    },
+
+    async ajouterFavori(id) {
+      return request('/marketing/favoris/' + id, { method: 'POST' });
+    },
+
+    async supprimerFavori(id) {
+      return request('/marketing/favoris/' + id, { method: 'DELETE' });
+    },
+
+    async ajouterAvisProduit(id, payload) {
+      return request('/produits/' + id + '/avis', { method: 'POST', body: payload });
+    },
+
+    async fidelite() {
+      return request('/marketing/fidelite');
     },
 
     // ----- Profil & adresses -----
@@ -168,10 +246,40 @@
       return request('/commandes/' + id);
     },
 
-    async passerCommande(articles, adresseId) {
+    async telechargerFacture(id) {
+      const headers = {
+        'Accept': 'text/html',
+        'X-Requested-With': 'XMLHttpRequest',
+      };
+      const token = getToken();
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+
+      const response = await fetch(BASE_URL + '/commandes/' + id + '/facture', {
+        headers,
+        credentials: 'same-origin',
+      });
+
+      if (!response.ok) {
+        let message = `Erreur ${response.status}`;
+        try {
+          const data = await response.json();
+          message = data.message || message;
+        } catch (e) {}
+        throw new Error(message);
+      }
+
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/i);
+      return {
+        blob: await response.blob(),
+        filename: match ? match[1] : 'facture-nayela-paris.html',
+      };
+    },
+
+    async passerCommande(articles, adresseId, codePromo) {
       return request('/commandes', {
         method: 'POST',
-        body: { articles, adresse_id: adresseId || null },
+        body: { articles, adresse_id: adresseId || null, code_promo: codePromo || null },
       });
     },
 
@@ -206,6 +314,11 @@
     // ----- Admin -----
     async adminStats() {
       return request('/admin/statistiques');
+    },
+
+    async adminDashboard(params) {
+      const q = new URLSearchParams(params || {}).toString();
+      return request('/admin/dashboard' + (q ? '?' + q : ''));
     },
 
     async adminProduits() {
@@ -312,6 +425,34 @@
 
     async adminRembourserRetour(id) {
       return request('/admin/retours/' + id + '/rembourser', { method: 'POST' });
+    },
+
+    async adminCoupons() {
+      return request('/admin/coupons');
+    },
+
+    async adminCreateCoupon(payload) {
+      return request('/admin/coupons', { method: 'POST', body: payload });
+    },
+
+    async adminUpdateCoupon(id, payload) {
+      return request('/admin/coupons/' + id, { method: 'PUT', body: payload });
+    },
+
+    async adminDeleteCoupon(id) {
+      return request('/admin/coupons/' + id, { method: 'DELETE' });
+    },
+
+    async adminAvis() {
+      return request('/admin/avis');
+    },
+
+    async adminApproveAvis(id) {
+      return request('/admin/avis/' + id + '/approuver', { method: 'POST' });
+    },
+
+    async adminRejectAvis(id) {
+      return request('/admin/avis/' + id + '/refuser', { method: 'POST' });
     },
   };
 

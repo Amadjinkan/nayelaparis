@@ -3,17 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\Commande;
+use App\Services\EmailNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AdminCommandeController extends Controller
 {
+    public function __construct(private EmailNotificationService $emails) {}
+
     /**
      * GET /api/admin/commandes
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Commande::with(['user:id,prenom,nom,email', 'lignes', 'paiement']);
+        $query = Commande::with(['user:id,prenom,nom,email', 'lignes', 'paiement', 'historiqueStatuts']);
 
         if ($request->filled('statut')) {
             $query->where('statut', $request->statut);
@@ -29,9 +32,10 @@ class AdminCommandeController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $commande = Commande::findOrFail($id);
+        $ancienStatut = $commande->statut;
 
         $data = $request->validate([
-            'statut' => 'sometimes|in:pending,paid,processing,shipped,delivered,cancelled',
+            'statut' => 'sometimes|in:' . implode(',', Commande::STATUTS),
             'numero_suivi' => 'sometimes|nullable|string|max:100',
             'transporteur' => 'sometimes|nullable|string|max:50',
             'date_expedition' => 'sometimes|nullable|date',
@@ -39,19 +43,44 @@ class AdminCommandeController extends Controller
             'notes' => 'sometimes|nullable|string',
         ]);
 
+        $nouveauStatut = $data['statut'] ?? null;
+        unset($data['statut']);
+
         // Si on marque comme expédiée, mettre la date par défaut
-        if (isset($data['statut']) && $data['statut'] === 'shipped' && empty($data['date_expedition'])) {
+        if ($nouveauStatut === Commande::STATUT_SHIPPED && empty($data['date_expedition'])) {
             $data['date_expedition'] = now();
         }
-        if (isset($data['statut']) && $data['statut'] === 'delivered' && empty($data['date_livraison'])) {
+        if ($nouveauStatut === Commande::STATUT_DELIVERED && empty($data['date_livraison'])) {
             $data['date_livraison'] = now();
         }
 
-        $commande->update($data);
+        if ($data) {
+            $commande->update($data);
+        }
+
+        if ($nouveauStatut) {
+            $commande->changerStatut(
+                $nouveauStatut,
+                $data['notes'] ?? 'Statut mis à jour depuis le panneau administrateur.',
+                $request->user()?->id
+            );
+
+            if ($ancienStatut !== $nouveauStatut) {
+                $commandePourEmail = $commande->fresh(['lignes', 'user']);
+
+                if ($nouveauStatut === Commande::STATUT_SHIPPED) {
+                    $this->emails->shipmentConfirmation($commandePourEmail);
+                }
+
+                if ($nouveauStatut === Commande::STATUT_DELIVERED) {
+                    $this->emails->deliveryConfirmation($commandePourEmail);
+                }
+            }
+        }
 
         return response()->json([
             'message' => 'Commande mise à jour',
-            'commande' => $commande->fresh(['lignes', 'user']),
+            'commande' => $commande->fresh(['lignes', 'user', 'paiement', 'historiqueStatuts']),
         ]);
     }
 
@@ -62,9 +91,11 @@ class AdminCommandeController extends Controller
     {
         return response()->json([
             'total_commandes' => Commande::count(),
-            'en_attente' => Commande::where('statut', 'pending')->count(),
-            'payees' => Commande::whereIn('statut', ['paid', 'processing', 'shipped', 'delivered'])->count(),
-            'chiffre_affaire' => Commande::whereIn('statut', ['paid', 'processing', 'shipped', 'delivered'])
+            'en_attente' => Commande::where('statut', Commande::STATUT_PENDING)->count(),
+            'payees' => Commande::whereIn('statut', [Commande::STATUT_PAID, Commande::STATUT_PROCESSING, Commande::STATUT_SHIPPED, Commande::STATUT_DELIVERED])->count(),
+            'annulees' => Commande::where('statut', Commande::STATUT_CANCELLED)->count(),
+            'remboursees' => Commande::where('statut', Commande::STATUT_REFUNDED)->count(),
+            'chiffre_affaire' => Commande::whereIn('statut', [Commande::STATUT_PAID, Commande::STATUT_PROCESSING, Commande::STATUT_SHIPPED, Commande::STATUT_DELIVERED])
                 ->sum('total'),
             'commandes_recentes' => Commande::with('user:id,prenom,nom')
                 ->latest()

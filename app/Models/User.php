@@ -67,6 +67,21 @@ class User extends Authenticatable
         return $this->hasMany(Retour::class);
     }
 
+    public function favoris(): HasMany
+    {
+        return $this->hasMany(ProduitFavori::class);
+    }
+
+    public function avisProduits(): HasMany
+    {
+        return $this->hasMany(ProduitAvis::class);
+    }
+
+    public function fidelite(): HasMany
+    {
+        return $this->hasMany(LoyaltyTransaction::class);
+    }
+
     // ===== Helpers =====
 
     public function isAdmin(): bool

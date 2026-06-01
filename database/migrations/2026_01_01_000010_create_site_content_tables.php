@@ -99,7 +99,7 @@ return new class extends Migration {
             ['key' => 'topbar_message', 'value' => 'Livraison offerte dès 120 CAD · Collections Printemps-Été 2026 disponibles', 'group_name' => 'general'],
             ['key' => 'contact_phone', 'value' => '+1 437 000 0000', 'group_name' => 'contact'],
             ['key' => 'contact_email', 'value' => 'contact@nayelaparis.com', 'group_name' => 'contact'],
-            ['key' => 'whatsapp_number', 'value' => '', 'group_name' => 'contact'],
+            ['key' => 'whatsapp_number', 'value' => '+1 437 000 0000', 'group_name' => 'contact'],
             ['key' => 'instagram_url', 'value' => 'https://www.instagram.com/', 'group_name' => 'social'],
             ['key' => 'tiktok_url', 'value' => 'https://www.tiktok.com/', 'group_name' => 'social'],
             ['key' => 'facebook_url', 'value' => 'https://www.facebook.com/nayelaparis', 'group_name' => 'social'],

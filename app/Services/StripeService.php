@@ -95,6 +95,7 @@ class StripeService
         }
 
         try {
+            $wasSucceeded = $paiement->statut === 'succeeded';
             $pi = PaymentIntent::retrieve($paymentIntentId);
 
             $paiement->statut = match ($pi->status) {
@@ -118,11 +119,24 @@ class StripeService
                     }
                 }
 
-                // Marquer la commande comme payée
-                $paiement->commande->update(['statut' => 'paid']);
+                if ($paiement->commande && $paiement->commande->statut !== Commande::STATUT_PAID) {
+                    $paiement->commande->changerStatut(
+                        Commande::STATUT_PAID,
+                        'Paiement confirmé automatiquement par Stripe.'
+                    );
+                }
             }
 
             $paiement->save();
+
+            if ($pi->status === 'succeeded' && !$wasSucceeded) {
+                $paiementPourEmail = $paiement->fresh(['commande.user', 'commande.lignes']);
+                app(EmailNotificationService::class)->paymentConfirmation($paiementPourEmail);
+                if ($paiementPourEmail?->commande) {
+                    app(MarketingService::class)->crediterFidelite($paiementPourEmail->commande);
+                }
+            }
+
             return $paiement;
         } catch (ApiErrorException $e) {
             Log::error("Erreur Stripe confirmation paiement", [
@@ -133,6 +147,12 @@ class StripeService
                 'statut' => 'failed',
                 'message_erreur' => $e->getMessage(),
             ]);
+            if ($paiement->commande && $paiement->commande->statut === Commande::STATUT_PENDING) {
+                $paiement->commande->changerStatut(
+                    Commande::STATUT_PENDING,
+                    'Paiement refusé ou impossible à confirmer : ' . $e->getMessage()
+                );
+            }
             return $paiement;
         }
     }
@@ -178,6 +198,15 @@ class StripeService
             $paiement->update([
                 'statut' => $montant >= $totalPaye ? 'refunded' : 'partial_refund',
             ]);
+
+            if ($montant >= $totalPaye) {
+                if ($retour->commande->statut !== Commande::STATUT_REFUNDED) {
+                    $retour->commande->changerStatut(
+                        Commande::STATUT_REFUNDED,
+                        'Commande remboursée après retour.'
+                    );
+                }
+            }
 
             return $refund;
         } catch (ApiErrorException $e) {

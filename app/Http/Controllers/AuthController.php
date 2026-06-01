@@ -3,14 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\EmailNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
+    public function __construct(private EmailNotificationService $emails) {}
+
     /**
      * POST /api/auth/register
      */
@@ -36,6 +38,7 @@ class AuthController extends Controller
         ]);
 
         $token = $user->createToken('auth-token')->plainTextToken;
+        $this->emails->accountCreated($user);
 
         return response()->json([
             'message' => 'Compte créé avec succès',
@@ -70,6 +73,39 @@ class AuthController extends Controller
             'message' => 'Connexion réussie',
             'token' => $token,
             'user' => $this->formatUser($user),
+        ]);
+    }
+
+    /**
+     * POST /api/auth/password/forgot
+     * Envoie un mot de passe temporaire par email si le compte existe.
+     */
+    public function requestPasswordReset(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => 'required_without:telephone|nullable|email',
+            'telephone' => 'required_without:email|nullable|string|max:30',
+            'method' => 'nullable|in:email,sms',
+        ]);
+
+        $user = null;
+        if (!empty($data['email'])) {
+            $user = User::where('email', strtolower($data['email']))->first();
+        } elseif (!empty($data['telephone'])) {
+            $user = User::where('telephone', $data['telephone'])->first();
+        }
+
+        if ($user) {
+            $temporaryPassword = 'NP-' . random_int(100000, 999999);
+            $user->forceFill([
+                'mot_de_passe' => Hash::make($temporaryPassword),
+            ])->save();
+
+            $this->emails->passwordReset($user, $temporaryPassword);
+        }
+
+        return response()->json([
+            'message' => 'Si le compte existe, une réinitialisation sera envoyée.',
         ]);
     }
 
